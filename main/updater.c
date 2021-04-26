@@ -161,10 +161,10 @@ static void ota_example_task(void *pvParameter)
 	ESP_LOGI(TAG, "esp_ota_begin succeeded");
 
 	//send message via UART for signalling ready.
-	uart_flush(UART_NUM_2);
-    uart_flush_input(UART_NUM_2);
 	uart_write_bytes(UART_NUM_2, "OTA:ready", strlen("OTA:ready"));
     uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
+    uart_flush(UART_NUM_2);
+    uart_flush_input(UART_NUM_2);
 
 	//receive binary image via UART.
     int binary_file_length = 0;
@@ -203,7 +203,7 @@ static void ota_example_task(void *pvParameter)
     uart_flush_input(UART_NUM_2);
 
     ESP_LOGE(TAG, "OTA is finished");
-    uart_write_bytes(UART_NUM_2, "OTA:finished", strlen("OTA:finished"));
+    uart_write_bytes(UART_NUM_2, "OTA:$FINISHED", strlen("OTA:$FINISHED"));
     uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
 
     ESP_LOGI(TAG, "Prepare to restart system!");
