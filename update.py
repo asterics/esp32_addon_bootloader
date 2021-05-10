@@ -25,13 +25,13 @@ datalen = 0
 
 with open(image, "rb") as input:
 	while True:
-		data = input.read(256)
+		data = input.read(128)
 		datalen += len(data)
 		print(datalen)
 		ser.write(data)
 		hash_func.update(data)
 		
-		if len(data) < 256:
+		if len(data) < 128:
 			print("Finished, last chunk size: " + str(len(data)))
 			#print("SHA256: " + str(hash_func.hexdigest().encode("ascii")))
 			break
