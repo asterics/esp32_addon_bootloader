@@ -18,8 +18,8 @@ Afterwards, the esp32 addon should be mounted on a FLipMouse/FABI device. This d
 4. The device switches to transparent UART mode (all data from the USB port is sent to the esp32 addon and vice versa) and changes the baud rate to 500kBaud/s
 5. Send the binary image to the USB serial port (it is possible to use the `update.py` script)
 6. The firmware will be transmitted.
-7. If successful, you should see the esp32_mouse_keyboard running and a status message `OTA:finished` (still with 500kBaud)
-8. TODO: FLipMouse/FABI currently (19.4.2021) do NOT switch back automatically to 9600Baud/s
+7. If successful, you should see the esp32_mouse_keyboard running and a status message `OTA:$FINISHED` (still with 500kBaud)
+8. FLipMouse/FABI switches back automatically to 9600Baud/s and returns to normal functional state.
 
 ## update.py
 
