@@ -65,9 +65,9 @@ const char* nl = "\r\n";
 
 static void __attribute__((noreturn)) task_fatal_error(const char * message)
 {
-    uart_write_bytes(UART_NUM_2, "OTA:error-", strlen("OTA:error-"));
-    uart_write_bytes(UART_NUM_2,message,strnlen(message,128));
-    uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
+    uart_write_bytes(UART_NUM_0, "OTA:error-", strlen("OTA:error-"));
+    uart_write_bytes(UART_NUM_0,message,strnlen(message,128));
+    uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
     vTaskDelay(2);
     esp_restart();
 }
@@ -103,12 +103,6 @@ static void ota_example_task(void *pvParameter)
     gpio_config(&io_conf);
     
     vTaskDelay(1);
-    
-    if(!gpio_get_level(GPIO_NUM_17))
-    {
-		ESP_LOGW(TAG,"Switching pins!");
-		changePinning = 1;
-	}
 
 	//Install UART driver, and get the queue.
 	esp_err_t ret = ESP_OK;
@@ -121,20 +115,16 @@ static void ota_example_task(void *pvParameter)
 	};
 	
 	//update UART config
-	ret = uart_param_config(UART_NUM_2, &uart_config);
+	ret = uart_param_config(UART_NUM_0, &uart_config);
 	if(ret != ESP_OK) 
 	{
 		ESP_LOGE(TAG,"external UART param config failed"); 
 	}
 	
-	//set IO pins
-	if(changePinning) ret = uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    else ret = uart_set_pin(UART_NUM_2, GPIO_NUM_16, GPIO_NUM_17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-	if(ret != ESP_OK)
-	{
-		ESP_LOGE(TAG,"external UART set pin failed"); 
-	}
-    uart_driver_install(UART_NUM_2, UART_FIFO_LEN * 1024, UART_FIFO_LEN * 2, 0, NULL, 0);
+	//set IO pins: not necessary, on RP2040 we use default UART0 config
+	
+	//install driver
+    uart_driver_install(UART_NUM_0, UART_FIFO_LEN * 1024, UART_FIFO_LEN * 2, 0, NULL, 0);
     
     const esp_partition_t *configured = esp_ota_get_boot_partition();
     const esp_partition_t *running = esp_ota_get_running_partition();
@@ -161,15 +151,15 @@ static void ota_example_task(void *pvParameter)
 	ESP_LOGI(TAG, "esp_ota_begin succeeded");
 
 	//send message via UART for signalling ready.
-	uart_write_bytes(UART_NUM_2, "OTA:ready", strlen("OTA:ready"));
-    uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
-    uart_flush(UART_NUM_2);
-    uart_flush_input(UART_NUM_2);
+	uart_write_bytes(UART_NUM_0, "OTA:ready", strlen("OTA:ready"));
+    uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
+    uart_flush(UART_NUM_0);
+    uart_flush_input(UART_NUM_0);
 
 	//receive binary image via UART.
     int binary_file_length = 0;
     while (1) {
-        int data_read = uart_read_bytes(UART_NUM_2, (uint8_t*) ota_write_data, BUFFSIZE, 2000/portTICK_PERIOD_MS);
+        int data_read = uart_read_bytes(UART_NUM_0, (uint8_t*) ota_write_data, BUFFSIZE, 2000/portTICK_PERIOD_MS);
         if (data_read > 0) {
             err = esp_ota_write( update_handle, (const void *)ota_write_data, data_read);
             if (err != ESP_OK) {
@@ -199,12 +189,12 @@ static void ota_example_task(void *pvParameter)
         task_fatal_error(esp_err_to_name(err));
     }
 
-    uart_flush(UART_NUM_2);
-    uart_flush_input(UART_NUM_2);
+    uart_flush(UART_NUM_0);
+    uart_flush_input(UART_NUM_0);
 
     ESP_LOGE(TAG, "OTA is finished");
-    uart_write_bytes(UART_NUM_2, "OTA:$FINISHED", strlen("OTA:$FINISHED"));
-    uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
+    uart_write_bytes(UART_NUM_0, "OTA:$FINISHED", strlen("OTA:$FINISHED"));
+    uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
 
     ESP_LOGI(TAG, "Prepare to restart system!");
     esp_restart();

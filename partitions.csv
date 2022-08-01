@@ -9,12 +9,12 @@ otadata,  data, ota,     0xd000,  0x2000
 phy_init, data, phy,     0xf000,  0x1000
 
 #512k factory (UART Bootloader)
-factory,  0,    0,       0x10000, 0x80000
+factory,  0,    0,       0x10000, 0x70000
 
 #2MB OTA
-ota_0,    0,    ota_0,  0x90000, 0x200000
+ota_0,    0,    ota_0,  0x90000, 0x170000
 
 #TODO: maybe reduce this partition & increase size of OTA?
 # minified & gzipped webgui uses just ~53kB.
 #1.4MB storage
-storage,  data, spiffs,   0x290000,  0x170000
+#storage,  data, spiffs,   0x290000,  0x170000
