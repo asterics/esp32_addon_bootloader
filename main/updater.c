@@ -16,7 +16,7 @@
  * MA 02110-1301, USA.
  * 
  * 
- * Copyright 2020-2021
+ * Copyright 2020-2022
  * Benjamin Aigner <beni@asterics-foundation.org>,<aignerb@technikum-wien.at>
  * Junaid Khan <junaid.khan.wien@gmail.com>
  *
@@ -26,6 +26,7 @@
  * * Update done via UART
  * * Cleanup & downsizing
  * * Status feedback via UART
+ * * LED output
  *
  */
 
@@ -54,7 +55,22 @@
 #include "driver/uart.h"
 
 #define BUFFSIZE 512
-#define HASH_LEN 32 /* SHA-256 digest length */
+
+//should we output on programming uart & logger?
+//#define USE_DEBUG_ON_PROGRAMMING_UART
+
+
+//select GPIO pin for LED toggle
+#if CONFIG_MODULE_NANO
+	#define LED_PIN	GPIO_NUM_27
+#endif
+#if CONFIG_MODULE_MINIBT
+	#define LED_PIN	GPIO_NUM_5
+#endif
+
+#ifdef USE_DEBUG_ON_PROGRAMMING_UART
+	#warning "debugging on programming uart is active, disable for release!"
+#endif
 
 static const char *TAG = "esp32_addon_ota";
 /*an ota data write buffer ready to write to the flash*/
@@ -62,14 +78,41 @@ static char ota_write_data[BUFFSIZE + 1] = { 0 };
 
 const char* nl = "\r\n";
 
+//forward declarations for LED
+void toggleLED();
+void offLED();
+void setupLED();
+
 
 static void __attribute__((noreturn)) task_fatal_error(const char * message)
 {
-    uart_write_bytes(UART_NUM_2, "OTA:error-", strlen("OTA:error-"));
-    uart_write_bytes(UART_NUM_2,message,strnlen(message,128));
-    uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
-    vTaskDelay(2);
+    uart_write_bytes(UART_NUM_0, "OTA:error-", strlen("OTA:error-"));
+    uart_write_bytes(UART_NUM_0,message,strnlen(message,128));
+    uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
+    
+    //toggle LED 10 times to show major error, than restart.
+    #ifdef LED_PIN
+    for(uint8_t i = 0; i<10; i++)
+    {
+		toggleLED();
+		vTaskDelay(250/portTICK_PERIOD_MS);
+	}
+	offLED();
+	#else
+		vTaskDelay(2);
+	#endif
+		
     esp_restart();
+}
+
+static void uart_print(const char *message)
+{
+	#ifdef USE_DEBUG_ON_PROGRAMMING_UART
+		uart_write_bytes(UART_NUM_0, message, strlen(message));
+		uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
+	#endif
+	
+	ESP_LOGI(TAG,"%s",message);
 }
 
 static void ota_example_task(void *pvParameter)
@@ -79,9 +122,7 @@ static void ota_example_task(void *pvParameter)
     esp_ota_handle_t update_handle = 0 ;
     const esp_partition_t *update_partition = NULL;
 
-    ESP_LOGI(TAG, "Starting OTA example");
-
-	int changePinning = 0;
+    uart_print("Starting OTA example");
     
     /*  determine if we should switch RX/TX pins.  */
     /*   we enable the RX pin as GPIO with pull-down.
@@ -104,11 +145,16 @@ static void ota_example_task(void *pvParameter)
     
     vTaskDelay(1);
     
-    if(!gpio_get_level(GPIO_NUM_17))
+    //on esp32miniBT modules we unfortunately switched RX/TX between revisions.
+    //detect if GPIO17 is high (RX line), then we used 17 as RX in UART pin setup
+    #if CONFIG_MODULE_MINIBT
+	int changePinning = 0;
+	if(!gpio_get_level(GPIO_NUM_17))
     {
 		ESP_LOGW(TAG,"Switching pins!");
 		changePinning = 1;
 	}
+	#endif
 
 	//Install UART driver, and get the queue.
 	esp_err_t ret = ESP_OK;
@@ -121,94 +167,146 @@ static void ota_example_task(void *pvParameter)
 	};
 	
 	//update UART config
-	ret = uart_param_config(UART_NUM_2, &uart_config);
+	ret = uart_param_config(UART_NUM_0, &uart_config);
 	if(ret != ESP_OK) 
 	{
-		ESP_LOGE(TAG,"external UART param config failed"); 
+		task_fatal_error("external UART param config failed"); 
 	}
 	
-	//set IO pins
+	//set IO pins: only necessary on miniBT module, on Arduino Nano we use UART0 in default config.
+	#if CONFIG_MODULE_MINIBT
 	if(changePinning) ret = uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     else ret = uart_set_pin(UART_NUM_2, GPIO_NUM_16, GPIO_NUM_17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 	if(ret != ESP_OK)
 	{
 		ESP_LOGE(TAG,"external UART set pin failed"); 
 	}
-    uart_driver_install(UART_NUM_2, UART_FIFO_LEN * 1024, UART_FIFO_LEN * 2, 0, NULL, 0);
-    
+	#endif
+	//install driver
+    uart_driver_install(UART_NUM_0, UART_FIFO_LEN * 1024, UART_FIFO_LEN * 2, 0, NULL, 0);
+    toggleLED();
     const esp_partition_t *configured = esp_ota_get_boot_partition();
     const esp_partition_t *running = esp_ota_get_running_partition();
 
     if (configured != running) {
-        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
+        ESP_LOGI(TAG,"Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
                  configured->address, running->address);
-        ESP_LOGW(TAG, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
+        ESP_LOGI(TAG,"(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
     }
-    ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08x)",
+    ESP_LOGI(TAG,"Running partition type %d subtype %d (offset 0x%08x)",
              running->type, running->subtype, running->address);
 
-
+	toggleLED();
     update_partition = esp_ota_get_next_update_partition(NULL);
     if(update_partition == NULL) task_fatal_error("partition not found");
-    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%x",
+    ESP_LOGI(TAG,"Writing to partition subtype %d at offset 0x%x",
              update_partition->subtype, update_partition->address);
+    toggleLED();
 
     err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
 	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+		uart_print("esp_ota_begin failed:");
+		uart_print(esp_err_to_name(err));
 		task_fatal_error("ota begin failed");
 	}
-	ESP_LOGI(TAG, "esp_ota_begin succeeded");
+	uart_print("esp_ota_begin succeeded");
+	toggleLED();
 
 	//send message via UART for signalling ready.
-	uart_write_bytes(UART_NUM_2, "OTA:ready", strlen("OTA:ready"));
-    uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
-    uart_flush(UART_NUM_2);
-    uart_flush_input(UART_NUM_2);
+	uart_write_bytes(UART_NUM_0, "OTA:ready", strlen("OTA:ready"));
+    uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
+    uart_flush(UART_NUM_0);
+    uart_flush_input(UART_NUM_0);
 
 	//receive binary image via UART.
     int binary_file_length = 0;
     while (1) {
-        int data_read = uart_read_bytes(UART_NUM_2, (uint8_t*) ota_write_data, BUFFSIZE, 2000/portTICK_PERIOD_MS);
+        int data_read = uart_read_bytes(UART_NUM_0, (uint8_t*) ota_write_data, BUFFSIZE, 2000/portTICK_PERIOD_MS);
         if (data_read > 0) {
             err = esp_ota_write( update_handle, (const void *)ota_write_data, data_read);
             if (err != ESP_OK) {
                 task_fatal_error("ota write failed");
             }
+            toggleLED();
             binary_file_length += data_read;
         } else if (data_read == 0 && binary_file_length > 100000) {
-           ESP_LOGE(TAG, "empty buffer, assume finished update...");
+           uart_print("empty buffer, assume finished update...");
+           toggleLED();
            break;
         }
     }
-    ESP_LOGI(TAG, "Total Write binary data length: %d", binary_file_length);
+    //uart_print("Total Write binary data length: %d", binary_file_length);
 
 	
     err = esp_ota_end(update_handle);
     if (err != ESP_OK) {
         if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
-            ESP_LOGE(TAG, "Image validation failed, image is corrupted");
+            uart_print("Image validation failed, image is corrupted");
         }
-        ESP_LOGE(TAG, "esp_ota_end failed (%s)!", esp_err_to_name(err));
+        uart_print("esp_ota_end failed:");
+        uart_print(esp_err_to_name(err));
         task_fatal_error(esp_err_to_name(err));
     }
+    toggleLED();
 
     err = esp_ota_set_boot_partition(update_partition);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed (%s)!", esp_err_to_name(err));
+        uart_print("esp_ota_set_boot_partition failed:");
+        uart_print(esp_err_to_name(err));
         task_fatal_error(esp_err_to_name(err));
     }
+    toggleLED();
 
-    uart_flush(UART_NUM_2);
-    uart_flush_input(UART_NUM_2);
+    uart_flush(UART_NUM_0);
+    uart_flush_input(UART_NUM_0);
 
-    ESP_LOGE(TAG, "OTA is finished");
-    uart_write_bytes(UART_NUM_2, "OTA:$FINISHED", strlen("OTA:$FINISHED"));
-    uart_write_bytes(UART_NUM_2, nl, sizeof(nl));
+    uart_print("OTA is finished");
+    uart_write_bytes(UART_NUM_0, "OTA:$FINISHED", strlen("OTA:$FINISHED"));
+    uart_write_bytes(UART_NUM_0, nl, sizeof(nl));
 
-    ESP_LOGI(TAG, "Prepare to restart system!");
+    uart_print("Prepare to restart system!");
+    offLED();
     esp_restart();
     return ;
+}
+
+void toggleLED()
+{
+	#ifdef LED_PIN
+	static int led = 0;
+	if(led) led = 0;
+	else led = 1;
+	gpio_set_level(LED_PIN,led);
+	#endif
+}
+
+void offLED()
+{
+	#if CONFIG_MODULE_NANO
+		gpio_set_level(LED_PIN,1);
+	#endif
+	#if CONFIG_MODULE_MINIBT
+		gpio_set_level(LED_PIN,0);
+	#endif
+}
+
+void setupLED()
+{
+	#ifdef LED_PIN
+	gpio_config_t io_conf;
+    //disable interrupt
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    //set as output mode
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    //bit mask, we want to set the RX pin as input
+    io_conf.pin_bit_mask = (1ULL<<LED_PIN);
+    //disable pull-down mode
+    io_conf.pull_down_en = 0;
+    //disable pull-up mode
+    io_conf.pull_up_en = 0;
+    //configure GPIO with the given settings
+    gpio_config(&io_conf);
+    #endif
 }
 
 void app_main(void)
@@ -223,6 +321,6 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK( err );
-
+	setupLED();
     xTaskCreate(&ota_example_task, "esp32-addon-OTA", 8192, NULL, 5, NULL);
 }

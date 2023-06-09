@@ -3,10 +3,23 @@ Bootloader code for updating the esp32_mouse_keyboard firmware via FABI/FLipMous
 
 Because we have to frequently change the Bluetooth code from the esp32_mouse_keyboard repository AND there is not enough space to keep 2 versions of this code, we need a small bootloader (this repo) for flashing a new image.
 
+## Notes on esp32miniBT & Arduino Nano RP2040 Connect
+
+Because this firmware is used for updating the ESP32 code on our own [esp32miniBT](https://github.com/asterics/esp32_mouse_keyboard) board (addon to FLipMouse, FLipPad and FABI) as well as on the Arduino Nano RP2040 Connect, there are some differences in the setup:
+
+* The _partitions.csv_ is different, because a WROOM32 has 4MB flash, the uBlox Nina module on the Arduino only 2MB. If you need more space for your program, you can adjust the partitions.csv file to have a bigger ota partition.
+* Pinning: we use GPIO27 for the red LED on the Arduino board, on the esp32miniBT it is GPIO5 in reversed polarity.
+* Arduino: please load the esp32_addon_bootloader.ino file on the Arduino and connect __D2__ with __GND__ to reset the ESP32 into download mode. Then proceed with the Setup.
+* ESP32-logging: sdkconfig.default disables all the esp-idf logging by default. If necessary, change in menuconfig.
+
+Please select in `idf.py menuconfig` which board is used!
+
 ## Setup
 
 This firmware is flashed as usual, with a serial-to-usb converter and the idf.py command:
-```idf.py -p /dev/ttyUSB0 build flash```
+```idf.py -b 115200 -p /dev/ttyUSB0 build flash```
+
+(Baudrate can be higher, but the Arduino sketch for serial passthrough is setup to 115k2)
 
 Afterwards, the esp32 addon should be mounted on a FLipMouse/FABI device. This device should support the `AT UG` command.
 
