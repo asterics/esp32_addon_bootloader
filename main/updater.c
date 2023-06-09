@@ -229,9 +229,12 @@ static void ota_example_task(void *pvParameter) {
     while (1) {
         int data_read = uart_read_bytes(UART_EXT, (uint8_t*) ota_write_data, BUFFSIZE, 2000 / portTICK_PERIOD_MS);
         if (data_read > 0) {
+            uart_write_bytes(UART_EXT, "-", 1);
             err = esp_ota_write(update_handle, (const void *)ota_write_data, data_read);
             if (err != ESP_OK) {
                 task_fatal_error("ota write failed");
+            } else {
+              uart_write_bytes(UART_EXT, "x", 1);
             }
             toggleLED();
             binary_file_length += data_read;
