@@ -1,0 +1,13 @@
+menu "esp32_addon_bootloader - module selection"
+	    choice MODULE_TYPE
+                prompt "Module type"
+            help
+                Specify the module type (Arduino Nano RP2040 Connect or esp32miniBT module).
+                
+            config MODULE_MINIBT
+                bool "esp32miniBT module"
+
+            config MODULE_NANO
+                bool "Arduino Nano Connect RP2040 with uBlox Nina"
+            endchoice
+endmenu
