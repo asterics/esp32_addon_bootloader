@@ -39,6 +39,7 @@
 
 
 #include <string.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -194,11 +195,11 @@ static void ota_example_task(void *pvParameter) {
 
     if (configured != running) {
         ESP_LOGI(TAG, "Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
-                 configured->address, running->address);
+                 (unsigned int) configured->address, (unsigned int) running->address);
         ESP_LOGI(TAG, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
     }
     ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08x)",
-             running->type, running->subtype, running->address);
+             running->type, running->subtype, (unsigned int) running->address);
 
     toggleLED();
     update_partition = esp_ota_get_next_update_partition(NULL);
@@ -206,7 +207,7 @@ static void ota_example_task(void *pvParameter) {
         task_fatal_error("partition not found");
     }
     ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%x",
-             update_partition->subtype, update_partition->address);
+             update_partition->subtype, (unsigned int)update_partition->address);
     toggleLED();
 
     err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
@@ -229,9 +230,12 @@ static void ota_example_task(void *pvParameter) {
     while (1) {
         int data_read = uart_read_bytes(UART_EXT, (uint8_t*) ota_write_data, BUFFSIZE, 2000 / portTICK_PERIOD_MS);
         if (data_read > 0) {
+            uart_write_bytes(UART_EXT, "-", 1);
             err = esp_ota_write(update_handle, (const void *)ota_write_data, data_read);
             if (err != ESP_OK) {
                 task_fatal_error("ota write failed");
+            } else {
+              uart_write_bytes(UART_EXT, "x", 1);
             }
             toggleLED();
             binary_file_length += data_read;
@@ -325,6 +329,7 @@ void app_main(void) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
+    ESP_LOGI(TAG,"Starting bootloader");
     ESP_ERROR_CHECK(err);
     setupLED();
     xTaskCreate(&ota_example_task, "esp32-addon-OTA", 8192, NULL, 5, NULL);

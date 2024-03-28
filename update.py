@@ -22,7 +22,7 @@ print("Update file: " + image)
 ifile = open(image,'rb')
 
 # open the serial port (baudrate doesn't matter, USB-CDC)
-ser = serial.Serial(port, 115200, timeout=0.5)
+ser = serial.Serial(port, 500000, timeout=0.5)
 
 # avoid a Windows quirk: the Arduino does not respond to any data, if the DTR line is not set
 if os.name == 'nt':
